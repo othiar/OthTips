@@ -2,6 +2,10 @@
 
 All notable changes to `OthTips` should be recorded in this file.
 
+## 0.2.7
+
+- Added a stable `OthTips.zip` release asset alongside the versioned package for better updater compatibility.
+
 ## 0.2.6
 
 - Moved corpse and gather-status cleanup onto the modern tooltip data pipeline with `TooltipDataProcessor` pre-calls.
