@@ -1,0 +1,15 @@
+## Interface: 120001
+## Title: OthTips
+## Notes: Replaces Blizzard tooltips with customizable cursor-anchored or movable tooltips.
+## Author: Othiar
+## Version: 0.2.2
+## SavedVariables: OthTipsDB
+
+Core\Init.lua
+Core\Skin.lua
+Core\Units.lua
+Core\Anchor.lua
+Core\Hooks.lua
+Options\Widgets.lua
+Options\Panel.lua
+Options\Loader.lua
