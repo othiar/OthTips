@@ -25,7 +25,8 @@ jobs:
           $addonName = Split-Path $repoRoot -Leaf
           $stageRoot = Join-Path $repoRoot 'build'
           $stageAddon = Join-Path $stageRoot $addonName
-          $zipPath = Join-Path $repoRoot "$addonName-$version.zip"
+          $versionedZipPath = Join-Path $repoRoot "$addonName-$version.zip"
+          $stableZipPath = Join-Path $repoRoot "$addonName.zip"
 
           if (Test-Path $stageRoot) {
             Remove-Item $stageRoot -Recurse -Force
@@ -37,11 +38,16 @@ jobs:
             $_.Name -notin @('.git', '.github', '.idea', 'build')
           } | Copy-Item -Destination $stageAddon -Recurse -Force
 
-          if (Test-Path $zipPath) {
-            Remove-Item $zipPath -Force
+          if (Test-Path $versionedZipPath) {
+            Remove-Item $versionedZipPath -Force
           }
 
-          Compress-Archive -Path $stageAddon -DestinationPath $zipPath -Force
+          if (Test-Path $stableZipPath) {
+            Remove-Item $stableZipPath -Force
+          }
+
+          Compress-Archive -Path $stageAddon -DestinationPath $versionedZipPath -Force
+          Copy-Item -Path $versionedZipPath -Destination $stableZipPath -Force
 
       - name: Build release notes from changelog
         shell: pwsh
@@ -77,5 +83,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: OthTips-*.zip
+          files: |
+            OthTips-*.zip
+            OthTips.zip
           body_path: release-notes.md
