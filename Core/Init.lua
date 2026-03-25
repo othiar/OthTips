@@ -31,9 +31,6 @@ addon.constants = {
 
 addon.fonts = {
     order = {
-        "inter-thin",
-        "inter-extralight",
-        "inter-light",
         "inter-regular",
         "inter-medium",
         "inter-semibold",
@@ -42,18 +39,6 @@ addon.fonts = {
         "inter-black",
     },
     entries = {
-        ["inter-thin"] = {
-            label = "Inter Thin",
-            path = "Interface\\AddOns\\OthTips\\Media\\Inter-Thin.ttf",
-        },
-        ["inter-extralight"] = {
-            label = "Inter ExtraLight",
-            path = "Interface\\AddOns\\OthTips\\Media\\Inter-ExtraLight.ttf",
-        },
-        ["inter-light"] = {
-            label = "Inter Light",
-            path = "Interface\\AddOns\\OthTips\\Media\\Inter-Light.ttf",
-        },
         ["inter-regular"] = {
             label = "Inter Regular",
             path = "Interface\\AddOns\\OthTips\\Media\\Inter-Regular.ttf",

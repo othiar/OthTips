@@ -1,0 +1,50 @@
+name: Release Package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build addon zip
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $repoRoot = Get-Location
+          $addonName = Split-Path $repoRoot -Leaf
+          $stageRoot = Join-Path $repoRoot 'build'
+          $stageAddon = Join-Path $stageRoot $addonName
+          $zipPath = Join-Path $repoRoot "$addonName-$version.zip"
+
+          if (Test-Path $stageRoot) {
+            Remove-Item $stageRoot -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $stageAddon | Out-Null
+
+          Get-ChildItem -Path $repoRoot -Force | Where-Object {
+            $_.Name -notin @('.git', '.github', '.idea', 'build')
+          } | Copy-Item -Destination $stageAddon -Recurse -Force
+
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+
+          Compress-Archive -Path $stageAddon -DestinationPath $zipPath -Force
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OthTips-*.zip
+          generate_release_notes: true
