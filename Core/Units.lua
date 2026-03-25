@@ -689,6 +689,10 @@ function addon.GetNPCStatusLineFromTooltip(tooltip, unit, data)
     return table.concat(parts, " "), color
 end
 
+function addon.GetCorpseLabel()
+    return addon.NormalizeTooltipText(_G.CORPSE) or "Corpse"
+end
+
 function addon.GetQuestStatusLines(data, excludedTexts)
     -- Preserve only likely objective/progress lines after rebuilding a custom unit tooltip.
     if not data or not data.lines then
@@ -803,6 +807,155 @@ function addon.SetTooltipLine(tooltip, index, text, r, g, b)
     return true
 end
 
+function addon.HideTooltipLine(tooltip, index)
+    if not tooltip or tooltip:IsForbidden() or not tooltip.GetName then
+        return
+    end
+
+    local tooltipName = tooltip:GetName()
+    if not tooltipName then
+        return
+    end
+
+    local leftLine = _G[tooltipName .. "TextLeft" .. index]
+    local rightLine = _G[tooltipName .. "TextRight" .. index]
+    if leftLine then
+        leftLine:SetText(nil)
+        leftLine:Hide()
+    end
+    if rightLine then
+        rightLine:SetText(nil)
+        rightLine:Hide()
+    end
+end
+
+function addon.HideDuplicateStatusLines(tooltip, startIndex)
+    if not tooltip or tooltip:IsForbidden() then
+        return
+    end
+
+    for index = startIndex or 5, tooltip:NumLines() do
+        local text = addon.GetTooltipLineText(tooltip, index, "Left")
+        if text then
+            local lower = text:lower()
+            if lower:find("corpse", 1, true)
+                or lower:find("skinnable", 1, true)
+                or lower:find("skinning", 1, true)
+                or lower:find("mining", 1, true)
+                or lower:find("herbalism", 1, true)
+                or lower:find("engineering", 1, true)
+            then
+                addon.HideTooltipLine(tooltip, index)
+            end
+        end
+    end
+end
+
+function addon.IsStatusLikeTooltipLine(text)
+    if not text then
+        return false
+    end
+
+    local normalized = addon.NormalizeTooltipText(text)
+    if not normalized then
+        return false
+    end
+
+    local corpseLabel = addon.GetCorpseLabel()
+    if normalized == corpseLabel or normalized:find(corpseLabel, 1, true) then
+        return true
+    end
+
+    if addon.MatchGatherInfoFromText(normalized, addon.GetGatherTooltipDefinitions()) then
+        return true
+    end
+
+    local lower = normalized:lower()
+    return lower:find("corpse", 1, true)
+        or lower:find("skinnable", 1, true)
+        or lower:find("skinning", 1, true)
+        or lower:find("mining", 1, true)
+        or lower:find("herbalism", 1, true)
+        or lower:find("engineering", 1, true)
+end
+
+function addon.StripStatusLikeLinesFromTooltipData(data)
+    if not data or not data.lines then
+        return
+    end
+
+    -- Remove corpse/gather status lines before Blizzard renders them so our
+    -- custom hostile status line does not have to race a later duplicate.
+    for index = #data.lines, 1, -1 do
+        local lineData = data.lines[index]
+        if addon.IsStatusLikeTooltipLine(lineData and lineData.leftText)
+            or addon.IsStatusLikeTooltipLine(lineData and lineData.rightText)
+        then
+            table.remove(data.lines, index)
+        end
+    end
+end
+
+function addon.HideStatusLikeLinesExcept(tooltip, keepIndex)
+    if not tooltip or tooltip:IsForbidden() then
+        return
+    end
+
+    for index = 2, tooltip:NumLines() do
+        if index ~= keepIndex then
+            local text = addon.GetTooltipLineText(tooltip, index, "Left")
+            if addon.IsStatusLikeTooltipLine(text) then
+                addon.HideTooltipLine(tooltip, index)
+            end
+        end
+    end
+end
+
+function addon.FindTooltipStatusLineIndex(tooltip, startIndex)
+    if not tooltip or tooltip:IsForbidden() then
+        return nil
+    end
+
+    for index = startIndex or 2, tooltip:NumLines() do
+        local text = addon.GetTooltipLineText(tooltip, index, "Left")
+        if addon.IsStatusLikeTooltipLine(text) then
+            return index
+        end
+    end
+
+    return nil
+end
+
+function addon.IsQuestLikeTooltipLine(text)
+    if not text then
+        return false
+    end
+
+    return text:find("/", 1, true) ~= nil
+        or text:find("%%", 1, true) ~= nil
+        or text:find(QUEST_DASH or "-", 1, true) ~= nil
+        or text:lower():find("quest", 1, true) ~= nil
+        or text:lower():find("objective", 1, true) ~= nil
+end
+
+function addon.HideTrailingHostileStatusLines(tooltip, statusLineIndex)
+    if not tooltip or tooltip:IsForbidden() or not statusLineIndex then
+        return
+    end
+
+    for index = statusLineIndex + 1, math.min(tooltip:NumLines(), statusLineIndex + 2) do
+        local leftText = addon.GetTooltipLineText(tooltip, index, "Left")
+        local rightText = addon.GetTooltipLineText(tooltip, index, "Right")
+
+        if addon.IsStatusLikeTooltipLine(leftText)
+            or addon.IsStatusLikeTooltipLine(rightText)
+            or ((leftText == nil and rightText == nil) and not addon.IsQuestLikeTooltipLine(leftText))
+        then
+            addon.HideTooltipLine(tooltip, index)
+        end
+    end
+end
+
 function addon.EstimateUnitTooltipWidth(lineTexts)
     -- Estimate from the rebuilt lines instead of reading protected fontstring widths.
     local padding = addon.GetTooltipPadding()
@@ -856,6 +1009,8 @@ function addon.ApplyHostileTooltipFallback(tooltip, unit, data)
     local npcTypeText = addon.GetNPCTypeTextFromTooltip(tooltip, unit, data)
     local npcStatusText, npcStatusColor = addon.GetNPCStatusLineFromTooltip(tooltip, unit, data)
     local applied = false
+    local previousStatusIndex = tooltip.OthTipsHostileStatusLineIndex
+    local statusLineIndex = addon.FindTooltipStatusLineIndex(tooltip, 2) or previousStatusIndex or 4
 
     if infoText and addon.SetTooltipLine(tooltip, 2, infoText, 0.78, 0.82, 0.88) then
         applied = true
@@ -867,13 +1022,26 @@ function addon.ApplyHostileTooltipFallback(tooltip, unit, data)
 
     if npcStatusText and addon.SetTooltipLine(
         tooltip,
-        4,
+        statusLineIndex,
         npcStatusText,
         npcStatusColor and npcStatusColor.r or nil,
         npcStatusColor and npcStatusColor.g or nil,
         npcStatusColor and npcStatusColor.b or nil
     ) then
         applied = true
+        if previousStatusIndex and previousStatusIndex ~= statusLineIndex then
+            addon.HideTooltipLine(tooltip, previousStatusIndex)
+        end
+        tooltip.OthTipsHostileStatusLineIndex = statusLineIndex
+        addon.HideStatusLikeLinesExcept(tooltip, statusLineIndex)
+        addon.HideTrailingHostileStatusLines(tooltip, statusLineIndex)
+    else
+        -- Clear any stale status line from a previous corpse/gather tooltip.
+        if previousStatusIndex then
+            addon.HideTooltipLine(tooltip, previousStatusIndex)
+        end
+        addon.HideStatusLikeLinesExcept(tooltip, nil)
+        tooltip.OthTipsHostileStatusLineIndex = nil
     end
 
     -- Keep Blizzard's hostile tooltip content intact, but ensure the panel is tall enough
@@ -1052,7 +1220,12 @@ function addon.ReapplyVisibleUnitTooltip(tooltip)
         return
     end
 
+    if tooltip.OthTipsRenderedDataInstanceID == (data.dataInstanceID or true) then
+        return
+    end
+
     if addon.ApplyCustomUnitRendering(tooltip, data) then
+        tooltip.OthTipsRenderedDataInstanceID = data.dataInstanceID or true
         addon.ResetTopRightTextAnchor(tooltip)
     end
 end
@@ -1070,8 +1243,10 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
     tooltip.OthTipsUnitDataInstanceID = dataInstanceID
     tooltip.OthTipsUnitData = data
     tooltip.OthTipsUnit = addon.GetTooltipUnit(tooltip)
+    tooltip.OthTipsRenderedDataInstanceID = nil
 
-    -- Defer a few times because Blizzard may append or rebuild lines after the first pass.
+    -- Run once on the next frame and once shortly after; later async changes are
+    -- handled by TOOLTIP_DATA_UPDATE instead of polling on every frame.
     local function ApplyDeferredCustomRender(delay)
         C_Timer.After(delay, function()
             if not tooltip or tooltip:IsForbidden() or not tooltip:IsShown() or tooltip.OthTipsUnitDataInstanceID ~= dataInstanceID then
@@ -1084,7 +1259,6 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
         end)
     end
 
-    ApplyDeferredCustomRender(0)
     ApplyDeferredCustomRender(0)
     ApplyDeferredCustomRender(0.05)
 end

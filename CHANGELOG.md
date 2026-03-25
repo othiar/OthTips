@@ -2,6 +2,12 @@
 
 All notable changes to `OthTips` should be recorded in this file.
 
+## 0.2.6
+
+- Moved corpse and gather-status cleanup onto the modern tooltip data pipeline with `TooltipDataProcessor` pre-calls.
+- Replaced the remaining unit reapply polling with `TOOLTIP_DATA_UPDATE` handling keyed by tooltip data instance.
+- Fixed duplicate corpse lines on some attackable dead targets without regressing the recent performance improvements.
+
 ## 0.2.5
 
 - Added a maintained `CHANGELOG.md` for release notes.

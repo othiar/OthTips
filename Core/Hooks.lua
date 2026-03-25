@@ -44,17 +44,43 @@ function addon.OnTooltipUpdated(self, elapsed)
         addon.PositionTooltipAtCursor(self)
     end
 
-    if self == GameTooltip and self:IsShown() then
-        addon.ReapplyVisibleUnitTooltip(self)
+end
+
+function addon.OnTooltipDataUpdated(dataInstanceID)
+    local tooltip = GameTooltip
+    if not tooltip or not tooltip:IsShown() or tooltip:IsForbidden() then
+        return
     end
+
+    if tooltip.OthTipsUnitDataInstanceID ~= dataInstanceID then
+        return
+    end
+
+    local updatedData = tooltip.OthTipsUnitData
+    if tooltip.GetTooltipData then
+        local ok, tooltipData = pcall(tooltip.GetTooltipData, tooltip)
+        if ok and tooltipData then
+            updatedData = tooltipData
+        end
+    end
+
+    if not addon.IsSupportedUnitTooltipData(tooltip, updatedData) then
+        return
+    end
+
+    tooltip.OthTipsUnitData = updatedData
+    tooltip.OthTipsRenderedDataInstanceID = nil
+    addon.ReapplyVisibleUnitTooltip(tooltip)
 end
 
 function addon.OnTooltipCleared(self)
     self.OthTipsAnchorMode = nil
     self.OthTipsAnchorTarget = nil
+    self.OthTipsHostileStatusLineIndex = nil
     self.OthTipsUnit = nil
     self.OthTipsUnitDataInstanceID = nil
     self.OthTipsUnitData = nil
+    self.OthTipsRenderedDataInstanceID = nil
     self.OthTipsHideElapsed = nil
     self.OthTipsWorldCursorDriven = false
     addon.ResetTopRightTextAnchor(self)
@@ -99,6 +125,11 @@ function addon.RegisterTooltipHooks()
 
     if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and not addon.unitColorHooked then
         -- Use the modern tooltip data pipeline for unit formatting; avoid removed legacy hooks.
+        if TooltipDataProcessor.AddTooltipPreCall then
+            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Unit, addon.StripStatusLikeLinesFromTooltipData)
+            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Corpse, addon.StripStatusLikeLinesFromTooltipData)
+            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Object, addon.StripStatusLikeLinesFromTooltipData)
+        end
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, addon.ApplyUnitTextFormattingFromData)
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, addon.ApplyFactionRuntimeFromData)
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Corpse, addon.ApplyUnitTextFormattingFromData)
@@ -147,6 +178,7 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("WORLD_CURSOR_TOOLTIP_UPDATE")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("TOOLTIP_DATA_UPDATE")
 eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == addonName then
         addon.InitDatabase()
@@ -160,6 +192,8 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         addon.RetryExternalUnitFrameCompatibility()
     elseif event == "PLAYER_ENTERING_WORLD" then
         addon.RetryExternalUnitFrameCompatibility()
+    elseif event == "TOOLTIP_DATA_UPDATE" then
+        addon.OnTooltipDataUpdated(arg1)
     elseif event == "WORLD_CURSOR_TOOLTIP_UPDATE" then
         local noneAnchor = Enum and Enum.WorldCursorAnchorType and Enum.WorldCursorAnchorType.None
         addon.worldCursorTooltipActive = arg1 ~= nil and arg1 ~= noneAnchor
