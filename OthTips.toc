@@ -2,7 +2,7 @@
 ## Title: OthTips
 ## Notes: Replaces Blizzard tooltips with customizable cursor-anchored or movable tooltips.
 ## Author: Othiar
-## Version: 0.2.2
+## Version: 0.2.3
 ## SavedVariables: OthTipsDB
 
 Core\Init.lua
