@@ -461,10 +461,6 @@ function addon.GetKnownProfessionNames()
 end
 
 function addon.GetNPCGatherTagInfo(data)
-    if not data or not data.lines then
-        return nil
-    end
-
     local gatherTexts = {
         {
             matches = {
@@ -473,6 +469,7 @@ function addon.GetNPCGatherTagInfo(data)
                 addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_CLOTH),
                 addon.NormalizeTooltipText(_G.SKINNING),
             },
+            keywords = { "skinning", "skinnable", "skin" },
             label = "Skinnable",
             profession = addon.NormalizeTooltipText(_G.SKINNING) or "Skinning",
         },
@@ -481,6 +478,7 @@ function addon.GetNPCGatherTagInfo(data)
                 addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_HERB),
                 addon.NormalizeTooltipText(_G.HERBALISM),
             },
+            keywords = { "herbalism", "herb" },
             label = addon.NormalizeTooltipText(_G.HERBALISM) or "Herbalism",
             profession = addon.NormalizeTooltipText(_G.HERBALISM) or "Herbalism",
         },
@@ -489,6 +487,7 @@ function addon.GetNPCGatherTagInfo(data)
                 addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_MINING),
                 addon.NormalizeTooltipText(_G.MINING),
             },
+            keywords = { "mining", "mine", "miner" },
             label = addon.NormalizeTooltipText(_G.MINING) or "Mining",
             profession = addon.NormalizeTooltipText(_G.MINING) or "Mining",
         },
@@ -497,21 +496,124 @@ function addon.GetNPCGatherTagInfo(data)
                 addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_ENGINEERING),
                 addon.NormalizeTooltipText(_G.ENGINEERING),
             },
+            keywords = { "engineering", "engineer" },
             label = addon.NormalizeTooltipText(_G.ENGINEERING) or "Engineering",
             profession = addon.NormalizeTooltipText(_G.ENGINEERING) or "Engineering",
         },
     }
 
+    if not data or not data.lines then
+        return nil
+    end
+
     for _, lineData in ipairs(data.lines) do
-        local text = lineData and addon.NormalizeTooltipText(lineData.leftText) or nil
-        if text then
-            for _, gatherInfo in ipairs(gatherTexts) do
-                for _, matchText in ipairs(gatherInfo.matches) do
-                    if matchText and (text == matchText or text:find(matchText, 1, true)) then
-                        return gatherInfo
+        for _, text in ipairs({
+            lineData and addon.NormalizeTooltipText(lineData.leftText) or nil,
+            lineData and addon.NormalizeTooltipText(lineData.rightText) or nil,
+        }) do
+            if text then
+                local lowerText = text:lower()
+                for _, gatherInfo in ipairs(gatherTexts) do
+                    for _, matchText in ipairs(gatherInfo.matches) do
+                        if matchText and (text == matchText or text:find(matchText, 1, true)) then
+                            return gatherInfo
+                        end
+                    end
+                    for _, keyword in ipairs(gatherInfo.keywords or {}) do
+                        if lowerText:find(keyword, 1, true) then
+                            return gatherInfo
+                        end
                     end
                 end
             end
+        end
+    end
+
+    return nil
+end
+
+function addon.GetGatherTooltipDefinitions()
+    return {
+        {
+            matches = {
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE),
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_LEATHER),
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_CLOTH),
+                addon.NormalizeTooltipText(_G.SKINNING),
+            },
+            keywords = { "skinning", "skinnable", "skin" },
+            label = "Skinnable",
+            profession = addon.NormalizeTooltipText(_G.SKINNING) or "Skinning",
+        },
+        {
+            matches = {
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_HERB),
+                addon.NormalizeTooltipText(_G.HERBALISM),
+            },
+            keywords = { "herbalism", "herb" },
+            label = addon.NormalizeTooltipText(_G.HERBALISM) or "Herbalism",
+            profession = addon.NormalizeTooltipText(_G.HERBALISM) or "Herbalism",
+        },
+        {
+            matches = {
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_MINING),
+                addon.NormalizeTooltipText(_G.MINING),
+            },
+            keywords = { "mining", "mine", "miner" },
+            label = addon.NormalizeTooltipText(_G.MINING) or "Mining",
+            profession = addon.NormalizeTooltipText(_G.MINING) or "Mining",
+        },
+        {
+            matches = {
+                addon.NormalizeTooltipText(_G.UNIT_SKINNABLE_ENGINEERING),
+                addon.NormalizeTooltipText(_G.ENGINEERING),
+            },
+            keywords = { "engineering", "engineer" },
+            label = addon.NormalizeTooltipText(_G.ENGINEERING) or "Engineering",
+            profession = addon.NormalizeTooltipText(_G.ENGINEERING) or "Engineering",
+        },
+    }
+end
+
+function addon.MatchGatherInfoFromText(text, gatherTexts)
+    if not text then
+        return nil
+    end
+
+    local lowerText = text:lower()
+    for _, gatherInfo in ipairs(gatherTexts) do
+        for _, matchText in ipairs(gatherInfo.matches or {}) do
+            if matchText and (text == matchText or text:find(matchText, 1, true)) then
+                return gatherInfo
+            end
+        end
+        for _, keyword in ipairs(gatherInfo.keywords or {}) do
+            if lowerText:find(keyword, 1, true) then
+                return gatherInfo
+            end
+        end
+    end
+
+    return nil
+end
+
+function addon.GetNPCGatherTagInfoFromTooltip(tooltip, data)
+    local gatherInfo = addon.GetNPCGatherTagInfo(data)
+    if gatherInfo then
+        return gatherInfo
+    end
+
+    if not tooltip or tooltip:IsForbidden() then
+        return nil
+    end
+
+    local gatherTexts = addon.GetGatherTooltipDefinitions()
+    for index = 1, math.max(tooltip:NumLines(), 6) do
+        local leftText = addon.GetTooltipLineText(tooltip, index, "Left")
+        local rightText = addon.GetTooltipLineText(tooltip, index, "Right")
+        gatherInfo = addon.MatchGatherInfoFromText(leftText, gatherTexts) or addon.MatchGatherInfoFromText(rightText, gatherTexts)
+        if gatherInfo then
+            return gatherInfo
         end
     end
 
@@ -542,6 +644,30 @@ end
 function addon.GetNPCStatusLine(unit, data)
     local isDead = addon.SafeUnitCall(UnitIsDeadOrGhost, unit)
     local gatherInfo = addon.GetNPCGatherTagInfo(data)
+    if not isDead and not gatherInfo then
+        return nil, nil
+    end
+
+    local parts = {}
+    local color
+
+    if isDead then
+        parts[#parts + 1] = "Corpse"
+        color = RED_FONT_COLOR or { r = 1, g = 0.1, b = 0.1 }
+    end
+
+    if gatherInfo then
+        local knownProfessions = addon.GetKnownProfessionNames()
+        local gatherColor = knownProfessions[gatherInfo.profession] and GATHER_TAG_COLORS.available or GATHER_TAG_COLORS.unavailable
+        parts[#parts + 1] = addon.WrapColor("[" .. gatherInfo.label .. "]", gatherColor)
+    end
+
+    return table.concat(parts, " "), color
+end
+
+function addon.GetNPCStatusLineFromTooltip(tooltip, unit, data)
+    local isDead = addon.SafeUnitCall(UnitIsDeadOrGhost, unit)
+    local gatherInfo = addon.GetNPCGatherTagInfoFromTooltip(tooltip, data)
     if not isDead and not gatherInfo then
         return nil, nil
     end
@@ -728,7 +854,7 @@ function addon.ApplyHostileTooltipFallback(tooltip, unit, data)
 
     local infoText = addon.GetNPCLevelInfoTextFromTooltip(tooltip, unit, data)
     local npcTypeText = addon.GetNPCTypeTextFromTooltip(tooltip, unit, data)
-    local npcStatusText, npcStatusColor = addon.GetNPCStatusLine(unit, data)
+    local npcStatusText, npcStatusColor = addon.GetNPCStatusLineFromTooltip(tooltip, unit, data)
     local applied = false
 
     if infoText and addon.SetTooltipLine(tooltip, 2, infoText, 0.78, 0.82, 0.88) then
