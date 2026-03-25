@@ -43,8 +43,39 @@ jobs:
 
           Compress-Archive -Path $stageAddon -DestinationPath $zipPath -Force
 
+      - name: Build release notes from changelog
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $changelogPath = Join-Path (Get-Location) 'CHANGELOG.md'
+          $content = Get-Content $changelogPath
+          $startPattern = "^##\s+$([regex]::Escape($version))$"
+          $startIndex = -1
+
+          for ($i = 0; $i -lt $content.Count; $i++) {
+            if ($content[$i] -match $startPattern) {
+              $startIndex = $i
+              break
+            }
+          }
+
+          if ($startIndex -lt 0) {
+            throw "Could not find changelog section for version $version"
+          }
+
+          $notes = New-Object System.Collections.Generic.List[string]
+          for ($i = $startIndex + 1; $i -lt $content.Count; $i++) {
+            if ($content[$i] -match '^##\s+') {
+              break
+            }
+            $notes.Add($content[$i])
+          }
+
+          $notesPath = Join-Path (Get-Location) 'release-notes.md'
+          Set-Content -Path $notesPath -Value ($notes -join "`n")
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: OthTips-*.zip
-          generate_release_notes: true
+          body_path: release-notes.md
