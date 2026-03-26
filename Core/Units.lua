@@ -926,6 +926,20 @@ function addon.FindTooltipStatusLineIndex(tooltip, startIndex)
     return nil
 end
 
+function addon.ClearHostileStatusLine(tooltip)
+    if not tooltip or tooltip:IsForbidden() then
+        return
+    end
+
+    local previousStatusIndex = tooltip.OthTipsHostileStatusLineIndex
+    if previousStatusIndex then
+        addon.HideTooltipLine(tooltip, previousStatusIndex)
+    end
+
+    addon.HideStatusLikeLinesExcept(tooltip, nil)
+    tooltip.OthTipsHostileStatusLineIndex = nil
+end
+
 function addon.IsQuestLikeTooltipLine(text)
     if not text then
         return false
@@ -998,10 +1012,12 @@ end
 
 function addon.ApplyHostileTooltipFallback(tooltip, unit, data)
     if not tooltip or tooltip:IsForbidden() or not unit or addon.SafeUnitCall(UnitIsPlayer, unit) then
+        addon.ClearHostileStatusLine(tooltip)
         return false
     end
 
     if not addon.SafeUnitCall(UnitCanAttack, "player", unit) then
+        addon.ClearHostileStatusLine(tooltip)
         return false
     end
 
@@ -1240,6 +1256,7 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
     end
 
     local dataInstanceID = data.dataInstanceID or true
+    addon.ClearHostileStatusLine(tooltip)
     tooltip.OthTipsUnitDataInstanceID = dataInstanceID
     tooltip.OthTipsUnitData = data
     tooltip.OthTipsUnit = addon.GetTooltipUnit(tooltip)

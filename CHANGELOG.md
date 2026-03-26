@@ -2,6 +2,10 @@
 
 All notable changes to `OthTips` should be recorded in this file.
 
+## 0.2.8
+
+- Fixed a stale hostile corpse/gather status line that could carry over when moving quickly between targets.
+
 ## 0.2.7
 
 - Added a stable `OthTips.zip` release asset alongside the versioned package for better updater compatibility.
