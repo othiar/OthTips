@@ -26,7 +26,6 @@ jobs:
           $stageRoot = Join-Path $repoRoot 'build'
           $stageAddon = Join-Path $stageRoot $addonName
           $versionedZipPath = Join-Path $repoRoot "$addonName-$version.zip"
-          $stableZipPath = Join-Path $repoRoot "$addonName.zip"
 
           if (Test-Path $stageRoot) {
             Remove-Item $stageRoot -Recurse -Force
@@ -35,19 +34,38 @@ jobs:
           New-Item -ItemType Directory -Path $stageAddon | Out-Null
 
           Get-ChildItem -Path $repoRoot -Force | Where-Object {
-            $_.Name -notin @('.git', '.github', '.idea', 'build')
+            $_.Name -notin @('.git', '.github', '.idea', 'build', 'release.json')
           } | Copy-Item -Destination $stageAddon -Recurse -Force
 
           if (Test-Path $versionedZipPath) {
             Remove-Item $versionedZipPath -Force
           }
 
-          if (Test-Path $stableZipPath) {
-            Remove-Item $stableZipPath -Force
+          Compress-Archive -Path $stageAddon -DestinationPath $versionedZipPath -Force
+
+      - name: Build release manifest
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $repoRoot = Get-Location
+          $addonName = Split-Path $repoRoot -Leaf
+          $manifestPath = Join-Path $repoRoot 'release.json'
+
+          if (-not (Test-Path $manifestPath)) {
+            throw "Could not find release.json template"
           }
 
-          Compress-Archive -Path $stageAddon -DestinationPath $versionedZipPath -Force
-          Copy-Item -Path $versionedZipPath -Destination $stableZipPath -Force
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if (-not $manifest.releases -or $manifest.releases.Count -lt 1) {
+            throw "release.json must contain at least one release entry"
+          }
+
+          $manifest.releases[0].name = $addonName
+          $manifest.releases[0].version = $tag
+          $manifest.releases[0].filename = "$addonName-$version.zip"
+
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath
 
       - name: Build release notes from changelog
         shell: pwsh
@@ -85,5 +103,5 @@ jobs:
         with:
           files: |
             OthTips-*.zip
-            OthTips.zip
+            release.json
           body_path: release-notes.md
