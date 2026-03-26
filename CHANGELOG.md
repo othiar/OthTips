@@ -2,6 +2,10 @@
 
 All notable changes to `OthTips` should be recorded in this file.
 
+## 0.3.1
+
+- Added a GitHub `release.json` manifest asset alongside release zips for updater compatibility testing.
+
 ## 0.3.0
 
 - Simplified custom tooltip text formatting to player tooltips only.
