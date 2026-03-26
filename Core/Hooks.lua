@@ -64,6 +64,8 @@ function addon.OnTooltipDataUpdated(dataInstanceID)
         end
     end
 
+    addon.PrepareSupportedUnitTooltipData(updatedData)
+
     if not addon.IsSupportedUnitTooltipData(tooltip, updatedData) then
         return
     end
@@ -124,18 +126,10 @@ function addon.RegisterTooltipHooks()
     hooksecurefunc("GameTooltip_SetDefaultAnchor", addon.ApplyDefaultAnchor)
 
     if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and not addon.unitColorHooked then
-        -- Use the modern tooltip data pipeline for unit formatting; avoid removed legacy hooks.
-        if TooltipDataProcessor.AddTooltipPreCall then
-            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Unit, addon.StripStatusLikeLinesFromTooltipData)
-            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Corpse, addon.StripStatusLikeLinesFromTooltipData)
-            TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Object, addon.StripStatusLikeLinesFromTooltipData)
-        end
+        -- Only player unit tooltips use custom content formatting; non-player
+        -- tooltips stay on Blizzard's default text path.
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, addon.ApplyUnitTextFormattingFromData)
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, addon.ApplyFactionRuntimeFromData)
-        TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Corpse, addon.ApplyUnitTextFormattingFromData)
-        TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Corpse, addon.ApplyFactionRuntimeFromData)
-        TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Object, addon.ApplyUnitTextFormattingFromData)
-        TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Object, addon.ApplyFactionRuntimeFromData)
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Object, addon.FinalizeSupportedTooltipData)
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Currency, addon.FinalizeSupportedTooltipData)
         addon.unitColorHooked = true

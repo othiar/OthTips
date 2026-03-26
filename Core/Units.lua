@@ -1,4 +1,4 @@
--- Unit tooltip formatting: players, NPCs, quest lines, and safe unit helpers.
+-- Unit tooltip formatting: players, quest lines, and safe unit helpers.
 local _, addon = ...
 
 function addon.NormalizeUnitToken(unit)
@@ -69,6 +69,26 @@ function addon.GetUnitReactionColor(unit)
     end
 
     return nil
+end
+
+function addon.ShouldTreatUnitAsHostile(unit)
+    if not unit or addon.SafeUnitCall(UnitIsPlayer, unit) then
+        return false
+    end
+
+    if addon.SafeUnitCall(UnitIsFriend, "player", unit) then
+        return false
+    end
+
+    return true
+end
+
+function addon.ShouldShowCorpseStatus(unit, data)
+    if data and data.type == Enum.TooltipDataType.Corpse then
+        return true
+    end
+
+    return addon.ShouldTreatUnitAsHostile(unit)
 end
 
 function addon.GetUnitFactionInfo(unit)
@@ -291,10 +311,10 @@ function addon.GetNPCTypeTextFromTooltip(tooltip, unit, data)
     return nil
 end
 
-function addon.GetTooltipUnit(tooltip)
+function addon.GetTooltipUnit(tooltip, allowMouseoverFallback)
     -- Hostile/world tooltips are inconsistent, so walk the common fallback chain.
     if not tooltip or tooltip:IsForbidden() or not tooltip.GetUnit then
-        return UnitExists("mouseover") and "mouseover" or nil
+        return allowMouseoverFallback ~= false and UnitExists("mouseover") and "mouseover" or nil
     end
 
     local _, unit = tooltip:GetUnit()
@@ -333,7 +353,7 @@ function addon.GetTooltipUnit(tooltip)
         end
     end
 
-    if UnitExists("mouseover") then
+    if allowMouseoverFallback ~= false and UnitExists("mouseover") then
         return "mouseover"
     end
 
@@ -623,12 +643,13 @@ end
 function addon.GetNPCStatusText(unit, data)
     local isDead = addon.SafeUnitCall(UnitIsDeadOrGhost, unit)
     local gatherInfo = addon.GetNPCGatherTagInfo(data)
-    if not isDead and not gatherInfo then
+    local showCorpseStatus = addon.ShouldShowCorpseStatus(unit, data)
+    if (not showCorpseStatus or not isDead) and not gatherInfo then
         return nil
     end
 
     local parts = {}
-    if isDead then
+    if showCorpseStatus and isDead then
         parts[#parts + 1] = addon.WrapColor("Corpse", RED_FONT_COLOR or { r = 1, g = 0.1, b = 0.1 })
     end
 
@@ -644,14 +665,15 @@ end
 function addon.GetNPCStatusLine(unit, data)
     local isDead = addon.SafeUnitCall(UnitIsDeadOrGhost, unit)
     local gatherInfo = addon.GetNPCGatherTagInfo(data)
-    if not isDead and not gatherInfo then
+    local showCorpseStatus = addon.ShouldShowCorpseStatus(unit, data)
+    if (not showCorpseStatus or not isDead) and not gatherInfo then
         return nil, nil
     end
 
     local parts = {}
     local color
 
-    if isDead then
+    if showCorpseStatus and isDead then
         parts[#parts + 1] = "Corpse"
         color = RED_FONT_COLOR or { r = 1, g = 0.1, b = 0.1 }
     end
@@ -668,14 +690,15 @@ end
 function addon.GetNPCStatusLineFromTooltip(tooltip, unit, data)
     local isDead = addon.SafeUnitCall(UnitIsDeadOrGhost, unit)
     local gatherInfo = addon.GetNPCGatherTagInfoFromTooltip(tooltip, data)
-    if not isDead and not gatherInfo then
+    local showCorpseStatus = addon.ShouldShowCorpseStatus(unit, data)
+    if (not showCorpseStatus or not isDead) and not gatherInfo then
         return nil, nil
     end
 
     local parts = {}
     local color
 
-    if isDead then
+    if showCorpseStatus and isDead then
         parts[#parts + 1] = "Corpse"
         color = RED_FONT_COLOR or { r = 1, g = 0.1, b = 0.1 }
     end
@@ -896,6 +919,15 @@ function addon.StripStatusLikeLinesFromTooltipData(data)
     end
 end
 
+function addon.PrepareSupportedUnitTooltipData(data)
+    if not data then
+        return data
+    end
+
+    addon.StripStatusLikeLinesFromTooltipData(data)
+    return data
+end
+
 function addon.HideStatusLikeLinesExcept(tooltip, keepIndex)
     if not tooltip or tooltip:IsForbidden() then
         return
@@ -1016,7 +1048,7 @@ function addon.ApplyHostileTooltipFallback(tooltip, unit, data)
         return false
     end
 
-    if not addon.SafeUnitCall(UnitCanAttack, "player", unit) then
+    if not addon.ShouldTreatUnitAsHostile(unit) then
         addon.ClearHostileStatusLine(tooltip)
         return false
     end
@@ -1076,15 +1108,7 @@ function addon.IsSupportedUnitTooltipData(tooltip, data)
         return false
     end
 
-    if data.type == Enum.TooltipDataType.Unit or data.type == Enum.TooltipDataType.Corpse then
-        return true
-    end
-
-    if data.type == Enum.TooltipDataType.Object then
-        return addon.GetTooltipUnit(tooltip) ~= nil or addon.HasUnitLikeTooltipData(data)
-    end
-
-    return false
+    return data.type == Enum.TooltipDataType.Unit
 end
 
 function addon.ShouldUseCustomUnitRendering(unit)
@@ -1099,24 +1123,23 @@ function addon.ShouldUseCustomUnitRendering(unit)
     return true
 end
 
-function addon.ApplyCustomUnitRendering(tooltip, data)
+function addon.ApplyCustomUnitRendering(tooltip, data, suppressShow)
     if not tooltip or tooltip:IsForbidden() then
         return false
     end
 
-    -- Rebuild unit tooltips from scratch so player/NPC layouts stay consistent.
-    local unit = tooltip.OthTipsUnit or addon.GetTooltipUnit(tooltip)
+    -- Only player tooltips use custom text formatting; NPCs and objects stay on Blizzard content.
+    local unit = tooltip.OthTipsUnit or addon.GetTooltipUnit(tooltip, true)
     local nameText = addon.GetUnitNameTextFromData(data)
         or addon.NormalizeTooltipText(addon.SafeUnitCall(UnitName, unit))
         or addon.NormalizeTooltipText(addon.SafeUnitCall(GetUnitName, unit, true))
         or addon.GetTooltipLineText(tooltip, 1, "Left")
-    if not nameText or nameText == "" then
-        return addon.ApplyHostileTooltipFallback(tooltip, unit, data)
+    if not unit or not addon.SafeUnitCall(UnitIsPlayer, unit) then
+        addon.ClearHostileStatusLine(tooltip)
+        return false
     end
 
-    -- Hostile world tooltips do not always expose a live unit token, but their tooltip data is
-    -- still rich enough to rebuild the NPC layout.
-    if not unit and not data then
+    if not nameText or nameText == "" then
         return false
     end
 
@@ -1173,30 +1196,6 @@ function addon.ApplyCustomUnitRendering(tooltip, data)
             excludedTexts[#excludedTexts + 1] = factionText
             usedLines = usedLines + 1
         end
-    else
-        local infoText = addon.GetNPCLevelInfoTextFromTooltip(tooltip, unit, data)
-        local npcTypeText = addon.GetNPCTypeTextFromTooltip(tooltip, unit, data)
-        local npcStatusText = addon.GetNPCStatusText(unit, data)
-        if infoText then
-            tooltip:AddLine(infoText, 0.78, 0.82, 0.88, false)
-            lineTexts[#lineTexts + 1] = infoText
-            excludedTexts[#excludedTexts + 1] = infoText
-            usedLines = usedLines + 1
-        end
-
-        if npcTypeText then
-            tooltip:AddLine(npcTypeText, 0.65, 0.68, 0.72, false)
-            lineTexts[#lineTexts + 1] = npcTypeText
-            excludedTexts[#excludedTexts + 1] = npcTypeText
-            usedLines = usedLines + 1
-        end
-
-        if npcStatusText then
-            tooltip:AddLine(npcStatusText, 0.72, 0.72, 0.72, false)
-            lineTexts[#lineTexts + 1] = npcStatusText
-            excludedTexts[#excludedTexts + 1] = npcStatusText
-            usedLines = usedLines + 1
-        end
     end
 
     for _, questLine in ipairs(addon.GetQuestStatusLines(data, excludedTexts)) do
@@ -1211,7 +1210,9 @@ function addon.ApplyCustomUnitRendering(tooltip, data)
     if tooltip.Layout then
         tooltip:Layout()
     end
-    tooltip:Show()
+    if not suppressShow then
+        tooltip:Show()
+    end
     return true
 end
 
@@ -1225,6 +1226,7 @@ function addon.ReapplyVisibleUnitTooltip(tooltip)
     if (not data or not data.lines) and C_TooltipInfo and C_TooltipInfo.GetWorldCursor then
         local ok, worldData = pcall(C_TooltipInfo.GetWorldCursor)
         if ok and worldData and worldData.lines then
+            addon.PrepareSupportedUnitTooltipData(worldData)
             data = worldData
             if addon.IsSupportedUnitTooltipData(tooltip, data) then
                 tooltip.OthTipsUnitData = data
@@ -1251,6 +1253,8 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
         return
     end
 
+    addon.PrepareSupportedUnitTooltipData(data)
+
     if not addon.IsSupportedUnitTooltipData(tooltip, data) then
         return
     end
@@ -1259,11 +1263,25 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
     addon.ClearHostileStatusLine(tooltip)
     tooltip.OthTipsUnitDataInstanceID = dataInstanceID
     tooltip.OthTipsUnitData = data
-    tooltip.OthTipsUnit = addon.GetTooltipUnit(tooltip)
+    tooltip.OthTipsUnit = addon.GetTooltipUnit(tooltip, true)
     tooltip.OthTipsRenderedDataInstanceID = nil
 
-    -- Run once on the next frame and once shortly after; later async changes are
-    -- handled by TOOLTIP_DATA_UPDATE instead of polling on every frame.
+    if not tooltip.OthTipsUnit or not addon.SafeUnitCall(UnitIsPlayer, tooltip.OthTipsUnit) then
+        tooltip.OthTipsUnit = nil
+        tooltip.OthTipsUnitData = nil
+        tooltip.OthTipsUnitDataInstanceID = nil
+        return
+    end
+
+    -- Apply immediately in the post-call so Blizzard's raw unit lines are not
+    -- shown for a frame, then keep one short late fallback for tooltip paths
+    -- that append lines after the initial build. Later async changes are handled
+    -- by TOOLTIP_DATA_UPDATE instead of polling on every frame.
+    if addon.ApplyCustomUnitRendering(tooltip, data, true) then
+        tooltip.OthTipsRenderedDataInstanceID = dataInstanceID
+        addon.ResetTopRightTextAnchor(tooltip)
+    end
+
     local function ApplyDeferredCustomRender(delay)
         C_Timer.After(delay, function()
             if not tooltip or tooltip:IsForbidden() or not tooltip:IsShown() or tooltip.OthTipsUnitDataInstanceID ~= dataInstanceID then
@@ -1276,7 +1294,6 @@ function addon.ApplyUnitTextFormattingFromData(tooltip, data)
         end)
     end
 
-    ApplyDeferredCustomRender(0)
     ApplyDeferredCustomRender(0.05)
 end
 

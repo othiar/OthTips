@@ -2,6 +2,11 @@
 
 All notable changes to `OthTips` should be recorded in this file.
 
+## 0.3.0
+
+- Simplified custom tooltip text formatting to player tooltips only.
+- Restored Blizzard's default text formatting for friendly and attackable non-player targets while keeping OthTips skinning and anchor behavior.
+
 ## 0.2.8
 
 - Fixed a stale hostile corpse/gather status line that could carry over when moving quickly between targets.
